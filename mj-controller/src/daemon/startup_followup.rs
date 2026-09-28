@@ -22,7 +22,7 @@ impl RuntimeState {
         for (key, value) in [("model", followup.model), ("effort", followup.effort)] {
             if let Some(value) = value {
                 steps.push((
-                    format!("{group_id}:{key}"),
+                    format!("{group_id}-{key}"),
                     StartupStep::Configure {
                         key: key.to_owned(),
                         value,
@@ -33,7 +33,7 @@ impl RuntimeState {
         }
         if followup.fast_mode {
             steps.push((
-                format!("{group_id}:fast-mode"),
+                format!("{group_id}-fast-mode"),
                 StartupStep::Configure {
                     key: "fast-mode".to_owned(),
                     value: "on".to_owned(),
@@ -43,7 +43,7 @@ impl RuntimeState {
         }
         if let Some(text) = followup.prompt {
             steps.push((
-                format!("{group_id}:prompt"),
+                format!("{group_id}-prompt"),
                 StartupStep::ApiPrompt { text },
             ));
         }

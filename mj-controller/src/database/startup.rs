@@ -219,12 +219,55 @@ pub fn fail_unavailable_startup_groups(session_id: &str, error: &str) -> Result<
         connection.execute(
             "UPDATE startup_steps SET phase='failed',error=?2
              WHERE session_id=?1 AND group_id IS NOT NULL AND phase='pending'
-               AND NOT EXISTS (SELECT 1 FROM sessions WHERE id=?1
+               AND NOT EXISTS (SELECT 1 FROM sessions WHERE session_id=?1
                  AND state IN ('provisioning','running','disconnected','checkpointing'))",
             params![session_id, error],
         )?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controller::test_support::{IsolatedTest, test_name};
+
+    #[test]
+    fn unavailable_startup_group_is_failed_when_session_is_absent() {
+        const CHILD: &str = "MJ_TEST_UNAVAILABLE_STARTUP_GROUP";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().unwrap();
+            IsolatedTest::new(test_name(
+                module_path!(),
+                "unavailable_startup_group_is_failed_when_session_is_absent",
+            ))
+            .env(CHILD, "1")
+            .env("MJ_INSTANCE", "unavailable-startup-group")
+            .isolated_store(root.path())
+            .run();
+            return;
+        }
+
+        let _writer = install_isolated_test_writer();
+        let session_id = "missing-session";
+        enqueue_startup_deliveries(vec![StartupDelivery {
+            session_id: session_id.into(),
+            command_id: "missing-session-command".into(),
+            step_json: "{}".into(),
+            phase: "pending".into(),
+            group_id: Some("missing-session-group".into()),
+            accepted_ordinal: None,
+            error: None,
+        }])
+        .unwrap();
+
+        fail_unavailable_startup_groups(session_id, "worker unavailable").unwrap();
+
+        let rows = load_latest_startup_group(session_id).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].phase, "failed");
+        assert_eq!(rows[0].error.as_deref(), Some("worker unavailable"));
+    }
 }
 
 /// Read only the first unfinished step using the pending-session index.
